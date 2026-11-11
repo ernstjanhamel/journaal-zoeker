@@ -31,3 +31,5 @@ Zoekt in de segmentbeschrijvingen van Beeld & Geluid (open SPARQL-API). Per segm
 - Loopt weken achter (9 nov 2026: t/m ca. 20 sept).
 - Traag: ca. 50 seconden per zoekvraag. Houd de periode kort.
 - Geen tijdcodes, en afspelen kan alleen bij B&G (inloggen).
+
+Gemaakt met hulp van Claude (Claude Code).
