@@ -1,6 +1,10 @@
 # journaal-zoeker
 
-Twee scripts om journaalfragmenten terug te vinden. Alleen Python 3 nodig, geen sleutels.
+Journaalfragmenten terugvinden, met tijdcode en een link die op de goede seconde begint.
+
+**Zonder Python:** gebruik de zoekpagina op https://ernstjanhamel.github.io/journaal-zoeker/. Kies een programma, typ een zoekterm en een periode.
+
+Of draai een van de twee scripts. Alleen Python 3 nodig, geen sleutels.
 
 ## 1. ondertitels.py: zoeken in wat er gezegd is, met tijdcode (aanrader)
 
@@ -31,5 +35,9 @@ Zoekt in de segmentbeschrijvingen van Beeld & Geluid (open SPARQL-API). Per segm
 - Loopt weken achter (9 nov 2026: t/m ca. 20 sept).
 - Traag: ca. 50 seconden per zoekvraag. Houd de periode kort.
 - Geen tijdcodes, en afspelen kan alleen bij B&G (inloggen).
+
+## Hoe de zoekpagina werkt
+
+`docs/index.html` zoekt in de browser zelf. De ondertitels mag een browser rechtstreeks bij NPO ophalen, de lijst met afleveringen niet. Die lijst zet `indexeer.py` daarom elke nacht in `docs/data/`, via een GitHub Action (`.github/workflows/indexeer.yml`). Een programma toevoegen: zet de slug uit de NPO Start-URL in `docs/series.json`.
 
 Gemaakt met hulp van Claude (Claude Code).

@@ -2,6 +2,8 @@
 
 Op YouTube vind je zo een fragment. Op NPO Start niet: je kunt alleen op programmatitel zoeken, niet op wat er gezegd wordt. Dit script lost dat op. Het zoekt in de ondertitels van NPO-programma's en geeft per treffer een link die meteen op de goede seconde begint.
 
+Geen zin in een script? Op https://ernstjanhamel.github.io/journaal-zoeker/ staat een zoekpagina die hetzelfde doet. Kies een programma, typ je zoekterm en een periode, klaar. De rest van deze uitleg is voor wie het script zelf wil draaien.
+
 ## Wat kun je doorzoeken?
 
 In principe alles op NPO Start met ondertitels. Getest:

@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Journaal-zoeker</title>
+<style>
+  :root {
+    --tekst: #1d1d1f; --zacht: #5f6368; --lijn: #dadce0; --vlak: #f6f7f9;
+    --accent: #c4002f; --accent-donker: #9a0025; --mark: #fff1a8;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--tekst); background: #fff;
+  }
+  main { max-width: 980px; margin: 0 auto; padding: 32px 20px 64px; }
+  h1 { font-size: 28px; margin: 0 0 4px; }
+  .intro { color: var(--zacht); margin: 0 0 24px; max-width: 680px; }
+  form {
+    display: grid; grid-template-columns: 1.4fr 1.6fr 1fr 1fr auto; gap: 12px; align-items: end;
+    background: var(--vlak); border: 1px solid var(--lijn); border-radius: 10px; padding: 16px;
+  }
+  label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 600; color: var(--zacht); }
+  input, select, button { font: inherit; }
+  input, select {
+    padding: 8px 10px; border: 1px solid var(--lijn); border-radius: 6px; background: #fff; color: var(--tekst); min-width: 0;
+  }
+  input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: transparent; }
+  button {
+    padding: 9px 18px; border: 0; border-radius: 6px; background: var(--accent); color: #fff; font-weight: 600; cursor: pointer;
+  }
+  button:hover { background: var(--accent-donker); }
+  button.stil { background: #fff; color: var(--tekst); border: 1px solid var(--lijn); }
+  button.stil:hover { background: var(--vlak); }
+  .tip { font-size: 13px; color: var(--zacht); margin: 8px 2px 0; }
+  #status { margin: 20px 0 8px; min-height: 24px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  #status .waarschuwing { color: var(--accent-donker); }
+  progress { width: 220px; height: 8px; accent-color: var(--accent); }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 15px; }
+  th { text-align: left; font-size: 13px; color: var(--zacht); border-bottom: 2px solid var(--lijn); padding: 8px; }
+  td { border-bottom: 1px solid var(--lijn); padding: 10px 8px; vertical-align: top; }
+  td.datum { white-space: nowrap; }
+  td.datum small { display: block; color: var(--zacht); font-size: 12px; }
+  td.tc { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td a { color: var(--accent); font-weight: 600; white-space: nowrap; }
+  mark { background: var(--mark); padding: 0 1px; }
+  footer { margin-top: 48px; font-size: 13px; color: var(--zacht); border-top: 1px solid var(--lijn); padding-top: 16px; }
+  footer a { color: inherit; }
+  @media (max-width: 760px) {
+    form { grid-template-columns: 1fr 1fr; }
+    form label:nth-child(1), form label:nth-child(2) { grid-column: 1 / -1; }
+    form .knoppen { grid-column: 1 / -1; }
+    td.tekst { min-width: 220px; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Journaal-zoeker</h1>
+  <p class="intro">Zoek in wat er gezegd is in het NOS Journaal, Nieuwsuur en andere programma's op NPO Start. Je krijgt per treffer een link die meteen op de goede seconde begint.</p>
+
+  <form id="zoek">
+    <label>Programma
+      <select id="serie"></select>
+    </label>
+    <label>Zoekterm
+      <input id="term" type="search" placeholder="bv. spreidingswet" required>
+    </label>
+    <label>Van
+      <input id="van" type="date" required>
+    </label>
+    <label>Tot en met
+      <input id="tot" type="date" required>
+    </label>
+    <div class="knoppen">
+      <button id="knop" type="submit">Zoeken</button>
+    </div>
+  </form>
+  <p class="tip">Zoek op een woord dat alleen bij jouw onderwerp hoort: "spreidingswet" werkt beter dan "asiel". Woorden los van elkaar zoeken? Zet er een komma tussen, bv. <i>gemeente, opvang</i>. Ze moeten dan allebei in hetzelfde stukje voorkomen.</p>
+
+  <div id="status"></div>
+  <div id="uitslag"></div>
+
+  <footer>
+    Werkt via de ondertitels op NPO Start, niet via een officiële koppeling. Bouwt NPO de site om, dan kan dit stoppen met werken.
+    Live-ondertiteling loopt soms een paar seconden achter: schuif dan even terug.
+    <span id="bijgewerkt"></span>
+    Broncode en Python-versie: <a href="https://github.com/ernstjanhamel/journaal-zoeker">github.com/ernstjanhamel/journaal-zoeker</a>.
+  </footer>
+</main>
+
+<script>
+const VTT = id => `https://cdn.npoplayer.nl/subtitles/nl/${id}.vtt`;
+const AFSPELEN = (slug, sec) => `https://npo.nl/start/afspelen/${slug}?start=${sec}`;
+const CONTEXT = 2;          // ondertitelblokken voor en na de treffer
+const TEGELIJK = 8;         // downloads tegelijk
+const VEEL = 400;           // vanaf hier waarschuwen
+
+const $ = id => document.getElementById(id);
+const dag = ts => new Date(ts * 1000).toLocaleDateString("sv-SE", { timeZone: "Europe/Amsterdam" });
+const datumNL = ts => new Date(ts * 1000).toLocaleDateString("nl-NL", { timeZone: "Europe/Amsterdam", weekday: "short", day: "numeric", month: "short", year: "numeric" });
+const tijdNL = ts => new Date(ts * 1000).toLocaleTimeString("nl-NL", { timeZone: "Europe/Amsterdam", hour: "2-digit", minute: "2-digit" });
+const kaal = s => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+const esc = s => s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+let series = [], cache = {}, bezig = null;
+
+function cues(vtt) {
+  const uit = [];
+  for (const blok of vtt.replace(/\r\n?/g, "\n").split(/\n\s*\n/)) {
+    const regels = blok.trim().split("\n");
+    const i = regels.findIndex(r => r.includes("-->"));
+    if (i < 0) continue;
+    const start = regels[i].split(" --> ")[0].trim().split(".")[0];
+    const tekst = regels.slice(i + 1).map(r => r.replace(/<[^>]+>/g, "")).join(" ").trim();
+    if (tekst) uit.push([start, tekst]);
+  }
+  return uit;
+}
+
+function seconden(tc) {
+  const d = tc.split(":").map(Number);
+  return d.length === 3 ? d[0] * 3600 + d[1] * 60 + d[2] : d[0] * 60 + d[1];
+}
+
+function treffers(blokken, termen) {
+  const uit = [];
+  let laatst = -99;
+  const kale = blokken.map(([, t]) => kaal(t));
+  for (let i = 0; i < blokken.length; i++) {
+    if (!kale[i].includes(termen[0]) || i - laatst <= CONTEXT * 2) continue;
+    const a = Math.max(0, i - CONTEXT), b = i + CONTEXT + 1;
+    const venster = kale.slice(a, b).join(" ");
+    if (!termen.every(t => venster.includes(t))) continue;
+    laatst = i;
+    uit.push({ tc: blokken[i][0], tekst: blokken.slice(a, b).map(([, t]) => t).join(" ") });
+  }
+  return uit;
+}
+
+function markeer(tekst, termen) {
+  // markeer op de kale tekst, zodat 'een' ook 'één' vindt
+  const k = kaal(tekst);
+  const vlag = new Array(tekst.length).fill(false);
+  for (const t of termen) {
+    let p = k.indexOf(t);
+    while (p >= 0) { for (let j = p; j < p + t.length; j++) vlag[j] = true; p = k.indexOf(t, p + t.length); }
+  }
+  let html = "", open = false;
+  for (let j = 0; j < tekst.length; j++) {
+    if (vlag[j] && !open) { html += "<mark>"; open = true; }
+    if (!vlag[j] && open) { html += "</mark>"; open = false; }
+    html += esc(tekst[j]);
+  }
+  return html + (open ? "</mark>" : "");
+}
+
+async function lijst(slug) {
+  if (!cache[slug]) {
+    const r = await fetch(`data/${slug}.json`);
+    if (!r.ok) throw new Error("afleveringenlijst niet gevonden");
+    cache[slug] = await r.json();
+  }
+  return cache[slug];
+}
+
+function status(html) { $("status").innerHTML = html; }
+
+async function zoek(e) {
+  e.preventDefault();
+  if (bezig) { bezig.stop = true; return; }
+  const serie = series.find(s => s.slug === $("serie").value);
+  const termen = $("term").value.split(",").map(t => kaal(t.trim().replace(/\s+/g, " "))).filter(Boolean);
+  const van = $("van").value, tot = $("tot").value;
+  if (!termen.length) return;
+  if (van > tot) { status('<span class="waarschuwing">De begindatum ligt na de einddatum.</span>'); return; }
+
+  const url = new URL(location); url.searchParams.set("serie", serie.slug); url.searchParams.set("q", $("term").value);
+  url.searchParams.set("van", van); url.searchParams.set("tot", tot); history.replaceState(null, "", url);
+
+  $("uitslag").innerHTML = "";
+  let alle;
+  try { alle = await lijst(serie.slug); } catch (err) { status(`<span class="waarschuwing">Kon de lijst met uitzendingen niet laden (${esc(err.message)}).</span>`); return; }
+  const afl = alle.filter(([ts]) => { const d = dag(ts); return d >= van && d <= tot; });
+  if (!afl.length) {
+    const eerste = alle.length ? datumNL(alle[0][0]) : "";
+    status(`Geen uitzendingen van ${esc(serie.naam)} in deze periode op NPO Start.${eerste ? ` De oudste die er staat is van ${eerste}.` : ""}`);
+    return;
+  }
+  if (afl.length > VEEL && !confirm(`Dat zijn ${afl.length} uitzendingen. Dat duurt ongeveer ${Math.ceil(afl.length / 300)} minuut of langer. Doorgaan?`)) return;
+
+  bezig = { stop: false };
+  $("knop").textContent = "Stoppen"; $("knop").classList.add("stil");
+  const resultaten = [];
+  let klaar = 0, zonder = 0, volgende = 0;
+  const toon = () => {
+    status(`<progress max="${afl.length}" value="${klaar}"></progress> ${klaar} van ${afl.length} uitzendingen doorzocht, ${resultaten.length} treffer${resultaten.length === 1 ? "" : "s"}`);
+  };
+  toon();
+
+  async function werker() {
+    while (volgende < afl.length && !bezig.stop) {
+      const [ts, pid, slug, titel] = afl[volgende++];
+      try {
+        const r = await fetch(VTT(pid));
+        if (!r.ok) throw 0;
+        for (const t of treffers(cues(await r.text()), termen)) resultaten.push({ ts, slug, titel, ...t });
+      } catch { zonder++; }
+      klaar++; toon();
+      if (klaar % 10 === 0) teken(resultaten, termen, serie);
+    }
+  }
+  await Promise.all(Array.from({ length: TEGELIJK }, werker));
+
+  const gestopt = bezig.stop;
+  bezig = null;
+  $("knop").textContent = "Zoeken"; $("knop").classList.remove("stil");
+  teken(resultaten, termen, serie);
+  let s = `${resultaten.length || "Geen"} treffer${resultaten.length === 1 ? "" : "s"} in ${klaar} uitzending${klaar === 1 ? "" : "en"}`;
+  if (gestopt) s += " (gestopt)";
+  if (zonder) s += `. ${zonder} zonder ondertitels`;
+  status(s + ".");
+}
+
+function teken(resultaten, termen, serie) {
+  if (!resultaten.length) { $("uitslag").innerHTML = ""; return; }
+  const rijen = [...resultaten].sort((a, b) => b.ts - a.ts || seconden(a.tc) - seconden(b.tc)).map(r => {
+    const sub = r.titel && r.titel !== serie.naam ? `${esc(r.titel)}, ${tijdNL(r.ts)}` : tijdNL(r.ts);
+    return `<tr><td class="datum">${datumNL(r.ts)}<small>${sub}</small></td><td class="tc">${r.tc.replace(/^00:/, "")}</td>`
+      + `<td class="tekst">${markeer(r.tekst, termen)}</td><td><a href="${AFSPELEN(r.slug, seconden(r.tc))}" target="_blank" rel="noopener">Afspelen ↗</a></td></tr>`;
+  }).join("");
+  $("uitslag").innerHTML = `<table><thead><tr><th>Datum</th><th>Tijd</th><th>Wat er gezegd wordt</th><th></th></tr></thead><tbody>${rijen}</tbody></table>`;
+}
+
+async function start() {
+  series = await (await fetch("series.json")).json();
+  $("serie").innerHTML = series.map(s => `<option value="${s.slug}">${esc(s.naam)}</option>`).join("");
+  const p = new URLSearchParams(location.search);
+  const vandaag = dag(Date.now() / 1000);
+  const maandTerug = dag(Date.now() / 1000 - 30 * 86400);
+  if (p.get("serie") && series.some(s => s.slug === p.get("serie"))) $("serie").value = p.get("serie");
+  $("term").value = p.get("q") || "";
+  $("van").value = p.get("van") || maandTerug;
+  $("tot").value = p.get("tot") || vandaag;
+  $("zoek").addEventListener("submit", zoek);
+  try {
+    const b = await (await fetch("data/bijgewerkt.json")).json();
+    $("bijgewerkt").textContent = `Lijst met uitzendingen bijgewerkt op ${new Date(b).toLocaleDateString("nl-NL", { day: "numeric", month: "long", year: "numeric" })}.`;
+  } catch {}
+  if (p.get("q")) $("zoek").requestSubmit();
+}
+start();
+</script>
+</body>
+</html>
